@@ -357,9 +357,15 @@ func (self *TMemoryCache) IsExist(name string) bool {
 		ele, _ := self.blocks[name]
 		self.lock.RUnlock()
 
-		// # 更新访问日期
-		ele.Value.(*TCacheBlock).Lastaccess.Add(DELAY_TIME * time.Second)
-		return ele != nil
+		if ele != nil {
+			// # 更新访问日期
+			if block, allowed := ele.Value.(*TCacheBlock); allowed && block != nil {
+				block.Lastaccess.Add(DELAY_TIME * time.Second)
+
+				return true
+			}
+		}
+
 	}
 	return false
 }
