@@ -23,10 +23,6 @@ const (
 //	count := c.Get("counter").(int)
 type ICache interface {
 	Active(open ...bool) bool
-	// get cached value by key.
-	Get(key string) interface{}
-	// set cached value with key and expire time.
-	Put(key string, val interface{}, timeout ...int64) error
 	// delete cached value by key.
 	//Delete(key string) error
 	Remove(key string) error
@@ -45,12 +41,17 @@ type ICache interface {
 	Max(max ...int) int
 	Len() int
 
+	//*** Std Attr ***
+	// below method will change element's order to front of the list
+	Get(key string) interface{}                              // get cached value by key.
+	Put(key string, val interface{}, timeout ...int64) error // set cached value with key and expire time.
+
 	//*** List Attr ***
 	// get first one
 	Front() interface{}
 	Back() interface{}
-	//MoveToFront()
-	//MoveToBack()
+	MoveToFront(key string)
+	MoveToBack(key string)
 
 	//*** Stack Attr ***
 	Push(value interface{}, expired ...int64) error //方法可向数组的末尾添加一个或多个元素，并返回新的长度。
