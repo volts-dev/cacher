@@ -21,7 +21,7 @@ const (
 //	c.Incr("counter")  // now is 1
 //	c.Incr("counter")  // now is 2
 //	count := c.Get("counter").(int)
-type ICache interface {
+type ICacher interface {
 	Active(open ...bool) bool
 	// delete cached value by key.
 	//Delete(key string) error
@@ -60,12 +60,12 @@ type ICache interface {
 
 }
 
-var adapters = make(map[string]func() ICache)
+var adapters = make(map[string]func() ICacher)
 
 // Register makes a cache adapter available by the adapter name.
 // If Register is called twice with the same name or if driver is nil,
 // it panics.
-func Register(name string, adapter func() ICache) {
+func Register(name string, adapter func() ICacher) {
 	if adapter == nil {
 		panic("cache: Register adapter is nil")
 	}
@@ -79,7 +79,7 @@ func Register(name string, adapter func() ICache) {
 // Create a new cache driver by adapter name and config string.
 // config need to be correct JSON as string: {"interval":360}.
 // it will start gc automatically.
-func NewCacher(adapterName, config string) (cacher ICache, e error) {
+func NewCacher(adapterName, config string) (cacher ICacher, e error) {
 	adapter, ok := adapters[adapterName]
 	if !ok {
 		e = fmt.Errorf("cache: unknown adapter name %q (forgot to import?)", adapterName)

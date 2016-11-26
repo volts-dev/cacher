@@ -50,7 +50,7 @@ type (
 )
 
 // NewMemoryCache returns a new MemoryCache.
-func NewMemoryCache() ICache {
+func NewMemoryCache() ICacher {
 	cacher := &TMemoryCache{
 		dur:     INTERVAL_TIME * time.Second,
 		expired: EXPIRED_TIME * time.Second,
