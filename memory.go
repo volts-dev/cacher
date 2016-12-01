@@ -212,7 +212,10 @@ func (self *TMemoryCache) Shift() interface{} {
 
 		if block, ok := ele.Value.(*TCacheBlock); ok {
 			//lName := fmt.Sprintf("%v", block.val)
-			self.Remove(block.key)
+			err := self.Remove(block.key)
+			if err != nil {
+				fmt.Println("Shift", err.Error())
+			}
 			return block.val
 		}
 	}
@@ -229,7 +232,7 @@ func (self *TMemoryCache) Pop() interface{} {
 			//lName := fmt.Sprintf("%v", block.val)
 			err := self.Remove(block.key)
 			if err != nil {
-
+				fmt.Println("Pop", err.Error())
 			}
 			return block.val
 		}
@@ -276,13 +279,13 @@ func (self *TMemoryCache) Push(value interface{}, expired ...int64) error {
 	return nil
 }
 
-/// Delete cache in memory.
-func (self *TMemoryCache) Remove(name string) error {
+/// Delete cache in memory.event a err
+func (self *TMemoryCache) Remove(name string) (err error) {
 	if ele, ok := self.blocks[name]; ok {
 		block := self.gcList.Remove(ele)
 		//fmt.Println("aa", name, ele, ok)
 		if block == nil {
-			return errors.New("object didn't in list")
+			err = errors.New("object didn't in list")
 		}
 		self.lock.Lock()
 		delete(self.blocks, name)
@@ -292,10 +295,10 @@ func (self *TMemoryCache) Remove(name string) error {
 	}
 
 	if _, ok := self.blocks[name]; ok {
-		return errors.New("delete key error")
+		err = errors.New("delete key error")
 	}
 
-	return nil
+	return
 }
 
 // Increase cache counter in memory.
@@ -503,7 +506,7 @@ func (self *TMemoryCache) vaccuum() {
 				//iter = iter.Next() // # before remove
 				err := self.Remove(block.key)
 				if err != nil {
-					fmt.Println("memory cacher GC block remove error !")
+					fmt.Println(err.Error())
 				}
 
 				continue
@@ -522,8 +525,10 @@ func (self *TMemoryCache) vaccuum() {
 
 			for _, idex := range list {
 				if over > 0 {
-					self.Remove(idex.block.key)
-
+					err := self.Remove(idex.block.key)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
 					over--
 					//#继续
 					continue

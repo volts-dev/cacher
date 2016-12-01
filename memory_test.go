@@ -7,13 +7,13 @@ import (
 )
 
 func TestStd(t *testing.T) {
-	cacher, err := NewCache("memory", `{"interval":5,"expired":30}`)
+	cacher, err := NewCacher("memory", `{"interval":5,"expired":30}`)
 	if err != nil {
 
 	}
 
 	for i := 0; i < 5000; i++ {
-		cacher.Put(fmt.Sprintf("%v", i), "Name")
+		cacher.Put(fmt.Sprintf("%v", i), "Name", int64(i))
 	}
 
 	if cacher.Len() != 5000 {
