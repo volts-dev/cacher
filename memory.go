@@ -19,6 +19,7 @@ var (
 
 type (
 	TIndex struct {
+		ele     *list.Element
 		block   *TCacheBlock
 		expired time.Duration
 	}
@@ -36,16 +37,16 @@ type (
 	// Memory cache adapter.
 	// it contains a RW locker for safe map storage.
 	TMemoryCache struct {
-		lock    sync.RWMutex
-		dur     time.Duration            // GC 时间间隔
-		expired time.Duration            // #默认缓存过期时间
-		blocks  map[string]*list.Element //*TCacheBlock
-		gcList  *list.List               // 	// 垃圾回收 store all of sessions for gc
-		max     int
-		active  bool
-
-		Every int //废弃 run an expiration check Every clock time
-
+		dur         time.Duration            // GC 时间间隔
+		expired     time.Duration            // #默认缓存过期时间
+		blocks      map[string]*list.Element //*TCacheBlock
+		gcList      *list.List               // 	// 垃圾回收 store all of sessions for gc
+		max         int
+		active      bool
+		new         func() interface{}
+		Every       int //废弃 run an expiration check Every clock time
+		lock        sync.RWMutex
+		gcList_lock sync.RWMutex
 	}
 )
 
@@ -62,6 +63,88 @@ func NewMemoryCache() ICacher {
 
 	return cacher
 }
+func (self *TMemoryCache) New(New func() interface{}) {
+	self.new = New
+}
+
+// Get cache from memory.
+// return slice
+func (self *TMemoryCache) All() (list []interface{}) {
+	if self.active {
+		self.lock.RLock()
+		for iter := self.gcList.Front(); iter != nil; iter = iter.Next() {
+			//fmt.Println("item:", iter.Value)
+			if itm, ok := iter.Value.(*TCacheBlock); ok {
+				itm.Lastaccess = time.Now()
+				list = append(list, itm.val)
+			}
+		}
+		self.lock.RUnlock()
+	}
+
+	return
+}
+
+// delete all cache in memory.
+func (self *TMemoryCache) Clear() error {
+	self.gcList_lock.Lock()
+	self.gcList.Init() // 初始化列表
+	self.gcList_lock.Unlock()
+
+	self.lock.Lock()
+	self.blocks = make(map[string]*list.Element)
+	self.lock.Unlock()
+	return nil
+}
+
+// get first one
+func (self *TMemoryCache) Front() interface{} {
+	if self.active {
+		self.gcList_lock.RLock()
+		block := self.gcList.Front().Value.(*TCacheBlock)
+		self.gcList_lock.RUnlock()
+		block.Lastaccess = time.Now()
+		return block.val
+	}
+
+	return nil
+}
+
+func (self *TMemoryCache) Back() interface{} {
+	if self.active {
+		self.gcList_lock.RLock()
+		block := self.gcList.Back().Value.(*TCacheBlock)
+		self.gcList_lock.RUnlock()
+		block.Lastaccess = time.Now()
+		return block.val
+	}
+
+	return nil
+}
+
+func (self *TMemoryCache) MoveToFront(key string) {
+	self.lock.RLock()
+	ele, _ := self.blocks[key]
+	self.lock.RUnlock()
+
+	if ele != nil {
+		self.gcList_lock.Lock()
+		self.gcList.MoveToFront(ele)
+		self.gcList_lock.Unlock()
+	}
+}
+
+func (self *TMemoryCache) MoveToBack(key string) {
+	self.lock.RLock()
+	ele, _ := self.blocks[key]
+	self.lock.RUnlock()
+
+	if ele != nil {
+		self.gcList_lock.Lock()
+		self.gcList.MoveToBack(ele)
+		self.gcList_lock.Unlock()
+	}
+}
 
 // Get cache from memory.
 // if non-existed or expired, return nil.
@@ -72,20 +155,13 @@ func (self *TMemoryCache) Get(name string) interface{} {
 
 	if ele != nil {
 		if block, ok := ele.Value.(*TCacheBlock); ok {
-			/*
-				// 过期检测
-				if time.Now().Sub(block.Lastaccess) > block.expired {
-					//if (time.Now().Unix() - block.Lastaccess.Unix()) > block.expired {
-					//go self.Delete(name)
-					self.Remove(name)
-					return nil
-				}
-			*/
 			//fmt.Println(block, ok)
 			block.Lastaccess = time.Now()
 
 			if ele != nil {
+				self.gcList_lock.Lock()
 				self.gcList.MoveToFront(ele)
+				self.gcList_lock.Unlock()
 			}
 			return block.val
 		}
@@ -94,82 +170,6 @@ func (self *TMemoryCache) Get(name string) interface{} {
 
 	return nil
 
-}
-
-// Get cache from memory.
-// return slice
-func (self *TMemoryCache) All() (list []interface{}) {
-	if self.active {
-		/*self.lock.RLock()
-		//fmt.Println(len(self.blocks))
-		list = make([]interface{}, 0)
-		self.gcList
-		for _, itm := range self.blocks {
-			list = append(list, itm)
-		}
-
-		self.lock.RUnlock()
-		*/
-		for iter := self.gcList.Front(); iter != nil; iter = iter.Next() {
-			//fmt.Println("item:", iter.Value)
-			if itm, ok := iter.Value.(*TCacheBlock); ok {
-				itm.Lastaccess = time.Now()
-				list = append(list, itm.val)
-			}
-		}
-	}
-
-	return
-}
-
-// get first one
-func (self *TMemoryCache) Front() interface{} {
-	if self.active {
-		block := self.gcList.Front().Value.(*TCacheBlock)
-		block.Lastaccess = time.Now()
-		return block.val
-
-		/*
-			//fmt.Println(len(self.blocks))
-			self.lock.RLock()
-			for _, val := range self.blocks {
-				if val != nil {
-					self.lock.RUnlock()
-
-					return val.val
-				}
-			}
-			self.lock.RUnlock()
-		*/
-	}
-	return nil
-
-}
-
-func (self *TMemoryCache) MoveToFront(key string) {
-	self.lock.RLock()
-	ele, _ := self.blocks[key]
-	self.lock.RUnlock()
-
-	if ele != nil {
-		self.gcList.MoveToFront(ele)
-	}
-}
-
-func (self *TMemoryCache) MoveToBack(key string) {
-	self.lock.RLock()
-	ele, _ := self.blocks[key]
-	self.lock.RUnlock()
-
-	if ele != nil {
-		self.gcList.MoveToBack(ele)
-	}
-}
-
-func (self *TMemoryCache) Back() interface{} {
-	block := self.gcList.Back().Value.(*TCacheBlock)
-	block.Lastaccess = time.Now()
-	return block.val
 }
 
 // Put cache to memory.
@@ -181,41 +181,51 @@ func (self *TMemoryCache) Put(name string, value interface{}, expired ...int64) 
 		lExpired = time.Duration(expired[0]) * time.Second
 	}
 
-	/*
-		self.lock.Lock()
-		self.blocks[name] = &TCacheBlock{
+	self.lock.RLock()
+	ele, ok := self.blocks[name]
+	self.lock.RUnlock()
+
+	var block *TCacheBlock
+	if ok {
+		if block, ok = ele.Value.(*TCacheBlock); ok {
+			block.Lastaccess = time.Now()
+			block.expired = lExpired
+		}
+
+	} else {
+		block = &TCacheBlock{
+			key:        name,
 			val:        value,
 			Lastaccess: time.Now(),
 			expired:    lExpired,
 		}
+
+		self.gcList_lock.Lock()
+		lElm := self.gcList.PushFront(block) //之前  self.gcList.PushBack(block)
+		self.gcList_lock.Unlock()
+
+		self.lock.Lock()
+		self.blocks[name] = lElm
 		self.lock.Unlock()
-	*/
-	block := &TCacheBlock{
-		key:        name,
-		val:        value,
-		Lastaccess: time.Now(),
-		expired:    lExpired,
 	}
 
-	lElm := self.gcList.PushFront(block) //之前  self.gcList.PushBack(block)
-
-	self.lock.Lock()
-	self.blocks[name] = lElm
-	self.lock.Unlock()
 	return nil
 }
 
 func (self *TMemoryCache) Shift() interface{} {
 	if self.active {
 		//fmt.Println(len(self.blocks))
+		self.gcList_lock.Lock()
 		ele := self.gcList.Front()
+		if ele == nil {
+			self.gcList_lock.Unlock()
+			return nil
+		}
+		self.gcList.Remove(ele)
+		self.gcList_lock.Unlock()
 
 		if block, ok := ele.Value.(*TCacheBlock); ok {
-			//lName := fmt.Sprintf("%v", block.val)
-			err := self.Remove(block.key)
-			if err != nil {
-				fmt.Println("Shift", err.Error())
-			}
+			self.remove_block(block.key)
 			return block.val
 		}
 	}
@@ -226,14 +236,17 @@ func (self *TMemoryCache) Shift() interface{} {
 func (self *TMemoryCache) Pop() interface{} {
 	if self.active {
 		//fmt.Println(len(self.blocks))
+		self.gcList_lock.Lock()
 		ele := self.gcList.Back()
+		if ele == nil {
+			self.gcList_lock.Unlock()
+			return nil
+		}
+		self.gcList.Remove(ele)
+		self.gcList_lock.Unlock()
 
 		if block, ok := ele.Value.(*TCacheBlock); ok {
-			//lName := fmt.Sprintf("%v", block.val)
-			err := self.Remove(block.key)
-			if err != nil {
-				fmt.Println("Pop", err.Error())
-			}
+			self.remove_block(block.key)
 			return block.val
 		}
 	}
@@ -247,31 +260,19 @@ func (self *TMemoryCache) Push(value interface{}, expired ...int64) error {
 		lExpired = time.Duration(expired[0]) * time.Second
 	}
 
-	/*
-		lCacheBlock := &TCacheBlock{
-			val:        value,
-			Lastaccess: time.Now(),
-			expired:    lExpired,
-		}
-		// random name
-		lName := string(utils.RandomCreateBytes(16))
-
-		self.lock.Lock()
-		self.blocks[lName] = lCacheBlock
-		self.lock.Unlock()
-	*/
-
 	// random name
-	lName := fmt.Sprintf("%v", &value) //string(utils.RandomCreateBytes(16))
-
+	lName := fmt.Sprintf("%v", &value)
+	lName = lName[2:]
+	//fmt.Println(lName)
 	block := &TCacheBlock{
 		key:        lName,
 		val:        value,
 		Lastaccess: time.Now(),
 		expired:    lExpired,
 	}
-
+	self.gcList_lock.Lock()
 	lElm := self.gcList.PushBack(block)
+	self.gcList_lock.Unlock()
 
 	self.lock.Lock()
 	self.blocks[lName] = lElm
@@ -279,23 +280,30 @@ func (self *TMemoryCache) Push(value interface{}, expired ...int64) error {
 	return nil
 }
 
+func (self *TMemoryCache) remove_list(ele *list.Element) {
+	self.gcList_lock.Lock()
+	self.gcList.Remove(ele)
+	self.gcList_lock.Unlock()
+}
+
+func (self *TMemoryCache) remove_block(name string) {
+	self.lock.Lock()
+	delete(self.blocks, name)
+	self.lock.Unlock()
+}
+
 /// Delete cache in memory.event a err
 func (self *TMemoryCache) Remove(name string) (err error) {
-	if ele, ok := self.blocks[name]; ok {
-		block := self.gcList.Remove(ele)
-		//fmt.Println("aa", name, ele, ok)
-		if block == nil {
-			err = errors.New("object didn't in list")
-		}
-		self.lock.Lock()
-		delete(self.blocks, name)
-		self.lock.Unlock()
-	} else {
-		return errors.New("key not exist")
-	}
+	self.lock.RLock()
+	ele, ok := self.blocks[name]
+	self.lock.RUnlock()
 
-	if _, ok := self.blocks[name]; ok {
-		err = errors.New("delete key error")
+	if ok {
+		self.remove_list(ele)
+		self.remove_block(name)
+		//fmt.Print("aa ", name, ok)
+	} else {
+		return errors.New("key not exist" + name)
 	}
 
 	return
@@ -309,7 +317,7 @@ func (self *TMemoryCache) Incr(key string) error {
 	self.lock.RUnlock()
 
 	if !ok {
-		return errors.New("key not exist")
+		return errors.New("key not exist " + key)
 	}
 	itm := ele.Value.(*TCacheBlock)
 	itm.Lastaccess.Add(DELAY_TIME * time.Second)
@@ -334,6 +342,8 @@ func (self *TMemoryCache) Incr(key string) error {
 
 // Count of cache size
 func (self *TMemoryCache) Len() int {
+	self.gcList_lock.RLock()
+	defer self.gcList_lock.RUnlock()
 	return self.gcList.Len() // len(self.blocks)
 }
 
@@ -407,16 +417,6 @@ func (self *TMemoryCache) IsExist(name string) bool {
 	return false
 }
 
-// delete all cache in memory.
-func (self *TMemoryCache) Clear() error {
-	self.gcList.Init() // 初始化列表
-
-	self.lock.Lock()
-	self.blocks = make(map[string]*list.Element)
-	self.lock.Unlock()
-	return nil
-}
-
 // start memory cache. it will check expiration in every clock time.
 func (self *TMemoryCache) GC(config string) error {
 	cf := make(map[string]int)
@@ -451,10 +451,6 @@ func (self *TMemoryCache) GC(config string) error {
 
 // check expiration.
 func (self *TMemoryCache) vaccuum() {
-	//if self.Every < 1 {
-	////	return
-	//}
-
 	var (
 		list  TIndexList
 		block *TCacheBlock
@@ -463,39 +459,39 @@ func (self *TMemoryCache) vaccuum() {
 
 	for {
 		//fmt.Println("pretick", self.dur)
+		list = make(TIndexList, 0)
 		<-time.After(self.dur)
 		//fmt.Println("tick")
 		if !self.active || self.gcList.Len() == 0 {
 			continue
 		}
 
-		list = make(TIndexList, 0)
-
 		// STEP:遍历GC表
-		iter := self.gcList.Back()
+		self.gcList_lock.RLock()
+		iter := self.gcList.Front()
+		self.gcList_lock.RUnlock()
 		for iter != nil {
-			//self.lock.RLock()
-			//lItem = self.gcList.Back()
-			//self.lock.RUnlock()
+			if iter == nil {
+				break // 结束回收
+			}
 
-			//if iter == nil {
-			//	break // 结束回收
-			//}
+			self.gcList_lock.RLock()
+			next := iter.Next()
+			self.gcList_lock.RUnlock()
 
 			//fmt.Println(element)
 			// #check
 			if block, ok = iter.Value.(*TCacheBlock); !ok {
-				next := iter.Prev() // # before remove
-				self.gcList.Remove(iter)
+				fmt.Println("RRR", iter)
+				self.remove_list(iter)
+
 				iter = next
 				continue
 			}
 
-			// # before remove
-			iter = iter.Prev()
-
 			// -1 永不过期
 			if block.expired == -1 {
+				iter = next
 				continue
 			}
 
@@ -504,19 +500,18 @@ func (self *TMemoryCache) vaccuum() {
 			//fmt.Println("expired %v ", block.expired, dur, self.expired)
 			if dur >= block.expired || dur >= self.expired {
 				//iter = iter.Next() // # before remove
-				err := self.Remove(block.key)
-				if err != nil {
-					fmt.Println(err.Error())
-				}
-
+				self.remove_list(iter)
+				self.remove_block(block.key)
+				//fmt.Print("aa ", block.key, ok)
+				iter = next
 				continue
 			} else if dur < block.expired/3 || dur < self.expired/3 {
 				// #对即将到期的进行标记
-				list = append(list, TIndex{block, dur})
+				list = append(list, TIndex{iter, block, dur})
 			}
-			//fmt.Println("expired %v ", block.expired, dur, self.expired)
+
 			// #jump to next
-			//iter = iter.Next()
+			iter = next
 		}
 
 		// # 删除即将到期
@@ -525,28 +520,30 @@ func (self *TMemoryCache) vaccuum() {
 
 			for _, idex := range list {
 				if over > 0 {
-					err := self.Remove(idex.block.key)
-					if err != nil {
-						fmt.Println(err.Error())
-					}
-					over--
+					self.remove_list(idex.ele)
+					self.remove_block(idex.block.key)
+
 					//#继续
+					over--
 					continue
 				}
 
 				break
 			}
 		}
-
 	}
 }
 
 // IsExpired returns true if an item is expired.
 func (self *TMemoryCache) IsExpired(name string) bool {
+	self.lock.RLock()
 	ele, ok := self.blocks[name]
+	self.lock.RUnlock()
+
 	if !ok {
 		return true
 	}
+
 	itm := ele.Value.(*TCacheBlock)
 	// -1 永不过期
 	if itm.expired == -1 {
