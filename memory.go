@@ -39,6 +39,7 @@ type (
 	TMemoryCache struct {
 		dur         time.Duration            // GC 时间间隔
 		expired     time.Duration            // #默认缓存过期时间
+		time_       []time.Time              // #完全清空时间
 		blocks      map[string]*list.Element //*TCacheBlock
 		gcList      *list.List               // 	// 垃圾回收 store all of sessions for gc
 		max         int
@@ -399,7 +400,7 @@ func (self *TMemoryCache) Decr(key string) error {
 }
 
 // check cache exist in memory.
-func (self *TMemoryCache) IsExist(name string) bool {
+func (self *TMemoryCache) Contains(name string) bool {
 	if self.active {
 		self.lock.RLock()
 		ele, _ := self.blocks[name]
@@ -449,6 +450,11 @@ func (self *TMemoryCache) GC(config string) error {
 
 }
 
+func (self *TMemoryCache) next_time() time.Duration {
+	//for self.
+	return 0
+}
+
 // check expiration.
 func (self *TMemoryCache) vaccuum() {
 	var (
@@ -461,6 +467,7 @@ func (self *TMemoryCache) vaccuum() {
 		//fmt.Println("pretick", self.dur)
 		list = make(TIndexList, 0)
 		<-time.After(self.dur)
+
 		//fmt.Println("tick")
 		if !self.active || self.gcList.Len() == 0 {
 			continue
@@ -535,7 +542,7 @@ func (self *TMemoryCache) vaccuum() {
 }
 
 // IsExpired returns true if an item is expired.
-func (self *TMemoryCache) IsExpired(name string) bool {
+func (self *TMemoryCache) Expired(name string) bool {
 	self.lock.RLock()
 	ele, ok := self.blocks[name]
 	self.lock.RUnlock()
@@ -560,13 +567,19 @@ func (self *TMemoryCache) IsExpired(name string) bool {
 	itm.Lastaccess.Add(DELAY_TIME * time.Second)
 	return false
 }
-
+func (self *TMemoryCache) Type() string {
+	return "memory"
+}
 func (self *TMemoryCache) Active(open ...bool) bool {
 	if len(open) > 0 {
 		self.active = open[0]
 	}
 
 	return self.active
+}
+
+func (self *TMemoryCache) Refresh(key string) {
+
 }
 
 func (self TIndexList) Len() int {

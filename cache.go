@@ -22,6 +22,8 @@ const (
 //	c.Incr("counter")  // now is 2
 //	count := c.Get("counter").(int)
 type ICacher interface {
+	Type() string // type of cacher memory,file etc.
+
 	Active(open ...bool) bool
 	// delete cached value by key.
 	//Delete(key string) error
@@ -31,7 +33,8 @@ type ICacher interface {
 	// decrease cached int value by key, as a counter.
 	Decr(key string) error
 	// check if cached value exists or not.
-	IsExist(key string) bool
+	Contains(key string) bool
+	Expired(name string) bool
 	// clear all cache.
 	Clear() error
 	// get all items
@@ -41,6 +44,7 @@ type ICacher interface {
 	Max(max ...int) int
 	Len() int
 
+	Refresh(key string)
 	//*** Std Attr ***
 	// below method will change element's order to front of the list
 	Get(key string) interface{}                              // get cached value by key.
