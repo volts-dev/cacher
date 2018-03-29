@@ -3,13 +3,11 @@ package cache
 import (
 	"container/list"
 	"encoding/json"
-	"sort"
-	//	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
-	//	"webgo/utils"
 )
 
 var (
