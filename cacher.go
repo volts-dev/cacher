@@ -1,7 +1,10 @@
-package cache
+package cacher
 
 import (
+	"context"
 	"fmt"
+	"hash/crc32"
+	"strings"
 )
 
 const (
@@ -10,6 +13,12 @@ const (
 	INTERVAL_TIME = 30    // interval of gc time
 	DELAY_TIME    = 10
 )
+
+type CacherType byte
+
+func (self CacherType) String() string {
+	return typeString[self]
+}
 
 // Cache interface contains all behaviors for cache adapter.
 // usage:
@@ -22,77 +31,77 @@ const (
 //	c.Incr("counter")  // now is 2
 //	count := c.Get("counter").(int)
 type ICacher interface {
-	Type() string // type of cacher memory,file etc.
-
+	String() string // type of cacher memory,file etc.
+	Init(opts ...Option)
 	Active(open ...bool) bool
-	// delete cached value by key.
-	//Delete(key string) error
-	Remove(key string) error
-	// increase cached int value by key, as a counter.
-	Incr(key string) error
-	// decrease cached int value by key, as a counter.
-	Decr(key string) error
-	// check if cached value exists or not.
-	Contains(key string) bool
-	Expired(name string) bool
-	// clear all cache.
-	Clear() error
-	// get all items
-	All() []interface{}
-	// start gc routine based on config string settings.
-	GC(config string) error
-	Max(max ...int) int
-	Len() int
 
-	Refresh(key string)
+	// increase cached int value by key, as a counter.
+	//Incr(key string) error
+	// decrease cached int value by key, as a counter.
+	//Decr(key string) error
+
+	//Expired(name string) bool
+
+	// get all items
+	//All() []interface{}
+	// start gc routine based on config string settings.
+	//GC(config string) error
+	//Max(max ...int) int
+
 	//*** Std Attr ***
 	// below method will change element's order to front of the list
-	Get(key string) interface{}                              // get cached value by key.
-	Put(key string, val interface{}, timeout ...int64) error // set cached value with key and expire time.
-
-	//*** List Attr ***
-	// get first one
-	Front() interface{}
-	Back() interface{}
-	MoveToFront(key string)
-	MoveToBack(key string)
-
-	//*** Stack Attr ***
-	Push(value interface{}, expired ...int64) error //方法可向数组的末尾添加一个或多个元素，并返回新的长度。
-	Shift() interface{}                             //方法用于把数组的第一个元素从其中删除，并返回第一个元素的值。
-	Pop() interface{}                               // 移出最后一个入栈的并返回它
-	New(New func() interface{})
+	Get(key string, value interface{}, ctx ...context.Context) error // get cached value by key.
+	Set(block *CacheBlock) error                                     // set cached value with key and expire time.
+	Exists(key string, ctx ...context.Context) bool                  // check if cached value exists or not.
+	Delete(key string, ctx ...context.Context) error                 // delete cached value by key.
+	//Refresh(key string)
+	Len() int
+	Clear() error // clear all cache.
+	Close() error
 }
 
-var adapters = make(map[string]func() ICacher)
+var adapters = make(map[CacherType]func() ICacher)
+var names = make(map[string]CacherType)
+var typeString = make(map[CacherType]string)
 
 // Register makes a cache adapter available by the adapter name.
 // If Register is called twice with the same name or if driver is nil,
 // it panics.
-func Register(name string, adapter func() ICacher) {
+func Register(name string, adapter func() ICacher) CacherType {
 	if adapter == nil {
 		panic("cache: Register adapter is nil")
 	}
-	if _, dup := adapters[name]; dup {
-		panic("cache: Register called twice for adapter " + name)
-	}
-	adapters[name] = adapter
+	name = strings.ToLower(name)
+	h := hashName(name)
+	adapters[h] = adapter
+	typeString[h] = name
+	names[name] = h
+	return h
 }
 
 //
 // Create a new cache driver by adapter name and config string.
 // config need to be correct JSON as string: {"interval":360}.
 // it will start gc automatically.
-func NewCacher(adapterName, config string) (cacher ICacher, e error) {
-	adapter, ok := adapters[adapterName]
+func NewCacher(name string) (cacher ICacher, e error) {
+	name = strings.ToLower(name)
+
+	typ, ok := names[name]
 	if !ok {
-		e = fmt.Errorf("cache: unknown adapter name %q (forgot to import?)", adapterName)
-		return
+		return nil, fmt.Errorf("cache: unknown adapter name %q (forgot to import?)", name)
 	}
-	cacher = adapter()
-	err := cacher.GC(config)
-	if err != nil {
-		cacher = nil
+	adapter := adapters[typ]
+	return adapter(), nil
+}
+
+func hashName(s string) CacherType {
+	v := int(crc32.ChecksumIEEE([]byte(s))) // 输入一个字符等到唯一标识
+	if v >= 0 {
+		return CacherType(v)
 	}
-	return
+	if -v >= 0 {
+		return CacherType(-v)
+	}
+	// v == MinInt
+	return CacherType(0)
 }
