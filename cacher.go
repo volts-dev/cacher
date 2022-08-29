@@ -83,7 +83,7 @@ func Register(name string, adapter func() ICacher) CacherType {
 // Create a new cache driver by adapter name and config string.
 // config need to be correct JSON as string: {"interval":360}.
 // it will start gc automatically.
-func NewCacher(name string) (cacher ICacher, e error) {
+func New(name string) (cacher ICacher, e error) {
 	name = strings.ToLower(name)
 
 	typ, ok := names[name]
