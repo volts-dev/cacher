@@ -30,35 +30,37 @@ func (self CacherType) String() string {
 //	c.Incr("counter")  // now is 1
 //	c.Incr("counter")  // now is 2
 //	count := c.Get("counter").(int)
-type ICacher interface {
-	String() string // type of cacher memory,file etc.
-	Init(opts ...Option)
-	Active(open ...bool) bool
+type (
+	ICacher interface {
+		String() string // type of cacher memory,file etc.
+		Init(opts ...Option)
+		Active(open ...bool) bool
 
-	// increase cached int value by key, as a counter.
-	//Incr(key string) error
-	// decrease cached int value by key, as a counter.
-	//Decr(key string) error
+		// increase cached int value by key, as a counter.
+		//Incr(key string) error
+		// decrease cached int value by key, as a counter.
+		//Decr(key string) error
 
-	//Expired(name string) bool
+		//Expired(name string) bool
 
-	// get all items
-	//All() []interface{}
-	// start gc routine based on config string settings.
-	//GC(config string) error
-	//Max(max ...int) int
+		// get all items
+		//All() []interface{}
+		// start gc routine based on config string settings.
+		//GC(config string) error
+		//Max(max ...int) int
 
-	//*** Std Attr ***
-	// below method will change element's order to front of the list
-	Get(key string, value interface{}, ctx ...context.Context) error // get cached value by key.
-	Set(block *CacheBlock) error                                     // set cached value with key and expire time.
-	Exists(key string, ctx ...context.Context) bool                  // check if cached value exists or not.
-	Delete(key string, ctx ...context.Context) error                 // delete cached value by key.
-	//Refresh(key string)
-	Len() int
-	Clear() error // clear all cache.
-	Close() error
-}
+		//*** Std Attr ***
+		// below method will change element's order to front of the list
+		Get(key string, value interface{}, ctx ...context.Context) error // get cached value by key.
+		Set(block *CacheBlock) error                                     // set cached value with key and expire time.
+		Exists(key string, ctx ...context.Context) bool                  // check if cached value exists or not.
+		Delete(key string, ctx ...context.Context) error                 // delete cached value by key.
+		//Refresh(key string)
+		Len() int
+		Clear() error // clear all cache.
+		Close() error
+	}
+)
 
 var adapters = make(map[CacherType]func() ICacher)
 var names = make(map[string]CacherType)

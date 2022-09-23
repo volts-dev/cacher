@@ -18,6 +18,10 @@ var Memory cacher.CacherType = cacher.Register("Memory", func() cacher.ICacher {
 })
 
 type (
+	emptyAny struct {
+		typ, val unsafe.Pointer
+	}
+
 	TIndex struct {
 		ele     *list.Element
 		block   *cacher.CacheBlock
@@ -27,23 +31,21 @@ type (
 	TIndexList []TIndex
 
 	ListCache interface {
+		cacher.ICacher
 		//*** List Attr ***
 		// get first one
-		Front() interface{}
-		Back() interface{}
+		Front() *cacher.CacheBlock
+		Back() *cacher.CacheBlock
 		MoveToFront(key string)
 		MoveToBack(key string)
 	}
 	StackCache interface {
+		cacher.ICacher
 		//*** Stack Attr ***
 		Push(value interface{}, expired ...int64) error //方法可向数组的末尾添加一个或多个元素，并返回新的长度。
 		Shift() interface{}                             //方法用于把数组的第一个元素从其中删除，并返回第一个元素的值。
 		Pop() interface{}                               // 移出最后一个入栈的并返回它
 		New(New func() interface{})
-	}
-
-	emptyAny struct {
-		typ, val unsafe.Pointer
 	}
 
 	// Memory cache adapter.
