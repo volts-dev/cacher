@@ -72,7 +72,7 @@ func TestStd(t *testing.T) {
 		}
 	*/
 
-	fmt.Println()
+	fmt.Println(chr.Keys())
 	//fmt.Printf("active=%v  max=%v", cacher.Active(), cacher.Max())
 	fmt.Println()
 	//fmt.Printf("Pop %v,%v/5000 ", cacher.Pop(), cacher.Len())

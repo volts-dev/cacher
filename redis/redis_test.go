@@ -9,10 +9,11 @@ import (
 
 func TestBase(t *testing.T) {
 	Key := "Test"
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "127.0.0.1:6379",
+	})
 	r := New(
-		WithRedis(redis.NewClient(&redis.Options{
-			Addr: "127.0.0.1:6379",
-		})),
+		WithRedis(rdb),
 	)
 	r.Set(&cacher.CacheBlock{
 		Key:   Key,

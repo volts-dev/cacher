@@ -56,6 +56,7 @@ type (
 		Exists(key string, ctx ...context.Context) bool                  // check if cached value exists or not.
 		Delete(key string, ctx ...context.Context) error                 // delete cached value by key.
 		//Refresh(key string)
+		Keys(ctx ...context.Context) []string
 		Len() int
 		Clear() error // clear all cache.
 		Close() error

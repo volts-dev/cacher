@@ -65,6 +65,7 @@ type (
 // NewMemoryCache returns a new MemoryCache.
 func New(opts ...cacher.Option) *TMemoryCache {
 	cfg := &Config{
+		Active:   true,
 		Interval: cacher.INTERVAL_TIME, //#必须防止0间隔
 		Expire:   cacher.EXPIRED_TIME,
 		max:      cacher.MAX_CACHE,
@@ -95,20 +96,26 @@ func (self *TMemoryCache) ___New(fn func() interface{}) {
 
 // Get cache from memory.
 // return slice
-func (self *TMemoryCache) All() (list []*cacher.CacheBlock) {
+func (self *TMemoryCache) Keys(ctx ...context.Context) []string {
 	if self.config.Active {
 		self.RLock()
-		for iter := self.config.GcList.Front(); iter != nil; iter = iter.Next() {
-			//fmt.Println("item:", iter.Value)
-			if itm, ok := iter.Value.(*cacher.CacheBlock); ok {
-				itm.LastAccess = time.Now()
-				list = append(list, itm)
+		defer self.RUnlock()
+
+		len := len(self.blocks)
+		keys := make([]string, len)
+		idx := 0
+		for k := range self.blocks {
+			if idx >= len {
+				break
 			}
+			keys[idx] = k
+			idx++
 		}
-		self.RUnlock()
+
+		return keys
 	}
 
-	return
+	return nil
 }
 
 func (self *TMemoryCache) Close() error {
@@ -576,9 +583,9 @@ func (self *TMemoryCache) String() string {
 	return "memory"
 }
 
-func (self *TMemoryCache) Active(open ...bool) bool {
-	if len(open) > 0 {
-		self.config.Active = open[0]
+func (self *TMemoryCache) Active(on ...bool) bool {
+	if len(on) > 0 {
+		self.config.Active = on[0]
 	}
 
 	return self.config.Active

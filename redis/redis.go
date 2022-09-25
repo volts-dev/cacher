@@ -27,7 +27,7 @@ type (
 		Set(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.StatusCmd
 		SetXX(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.BoolCmd
 		SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.BoolCmd
-
+		Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd
 		Get(ctx context.Context, key string) *redis.StringCmd
 		Del(ctx context.Context, keys ...string) *redis.IntCmd
 	}
@@ -39,7 +39,9 @@ type (
 )
 
 func New(opts ...cacher.Option) *RedisCache {
-	cfg := &Config{}
+	cfg := &Config{
+		Active: true,
+	}
 
 	cfg.Init(opts...)
 	cacher := &RedisCache{
@@ -64,12 +66,38 @@ func (self *RedisCache) String() string {
 	return "redis"
 }
 
-func (self *RedisCache) Active(open ...bool) bool {
-	if len(open) > 0 {
-		self.config.Active = open[0]
+func (self *RedisCache) Active(on ...bool) bool {
+	if len(on) > 0 {
+		self.config.Active = on[0]
 	}
 
 	return self.config.Active
+}
+
+func (self *RedisCache) Keys(ctx ...context.Context) []string {
+	var c context.Context
+	if len(ctx) > 0 {
+		c = ctx[0]
+	} else {
+		c = context.Background()
+	}
+	var cursor uint64
+	var keys, lst []string
+	for {
+		var err error
+		lst, cursor, err = self.config.cli.Scan(c, cursor, "prefix:*", 0).Result()
+		if err != nil {
+			panic(err)
+		}
+
+		keys = append(keys, lst...)
+
+		if cursor == 0 { // no more keys
+			break
+		}
+	}
+
+	return keys
 }
 
 // Count of cache size
