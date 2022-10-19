@@ -88,10 +88,9 @@ func Register(name string, adapter func() ICacher) CacherType {
 // it will start gc automatically.
 func New(name string) (cacher ICacher, e error) {
 	name = strings.ToLower(name)
-
 	typ, ok := names[name]
 	if !ok {
-		return nil, fmt.Errorf("cache: unknown adapter name %q (forgot to import?)", name)
+		return nil, fmt.Errorf("unknown adapter name of cacher %s which the adapter pkg must imported!", name)
 	}
 	adapter := adapters[typ]
 	return adapter(), nil
