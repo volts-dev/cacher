@@ -10,6 +10,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/jinzhu/copier"
 	"github.com/volts-dev/cacher"
 )
 
@@ -204,11 +205,15 @@ func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) er
 			self.config.GcListLock.Unlock()
 
 			// 实现任何类型复制
-			// TODO 需要更多验证稳定性
-			dst := (*emptyAny)(unsafe.Pointer(&value)).val
-			src := (*emptyAny)(unsafe.Pointer(&block.Value)).val
-			*(*emptyAny)(unsafe.Pointer(dst)) = *(*emptyAny)(unsafe.Pointer(src))
+			/*
+				// TODO 需要更多验证稳定性
+				// FIXME 无法复制结构体内的字符串
 
+				dst := (*emptyAny)(unsafe.Pointer(&value)).val
+				src := (*emptyAny)(unsafe.Pointer(&block.Value)).val
+				*(*emptyAny)(unsafe.Pointer(dst)) = *(*emptyAny)(unsafe.Pointer(src))
+			*/
+			copier.Copy(value, block.Value)
 			return nil
 		}
 	}
@@ -311,7 +316,7 @@ func (self *TMemoryCache) remove_block(name string) {
 	self.Unlock()
 }
 
-/// Delete cache in memory.event a err
+// / Delete cache in memory.event a err
 func (self *TMemoryCache) Delete(name string, ctx ...context.Context) (err error) {
 	self.RLock()
 	ele, ok := self.blocks[name]

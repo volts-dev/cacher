@@ -9,6 +9,21 @@ import (
 	"github.com/volts-dev/utils"
 )
 
+func TestWithStruct(t *testing.T) {
+	type A struct {
+		Int    int
+		String string
+	}
+	chr := New()
+	chr.Set(&cacher.CacheBlock{Key: "A", Value: &A{Int: 123456789, String: "fsdf"}})
+
+	a := A{String: "aaaaaaaa"}
+	if err := chr.Get("A", &a); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(a)
+}
+
 func TestConfig(t *testing.T) {
 	cfg := Config{}
 	cfg.Init(
