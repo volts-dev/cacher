@@ -44,12 +44,12 @@ func (self *Config) Init(opts ...cacher.Option) {
 
 func WithRedis(rds rediser) cacher.Option {
 	return func(cfg *cacher.Config) {
-		cfg.FieldByName("cli").AsInterface(rds)
+		cfg.SetByField("cli", rds)
 	}
 }
 
 func WithLocalCacher(chr cacher.ICacher) cacher.Option {
 	return func(cfg *cacher.Config) {
-		cfg.FieldByName("local_cache").AsInterface(chr)
+		cfg.SetByField("local_cache", chr)
 	}
 }

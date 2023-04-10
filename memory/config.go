@@ -34,12 +34,12 @@ func (self *Config) Init(opts ...cacher.Option) {
 
 func WithInterval(ticker int) cacher.Option {
 	return func(cfg *cacher.Config) {
-		cfg.FieldByName("interval").AsInterface(ticker)
+		cfg.SetByField("interval", ticker)
 	}
 }
 
 func WithExpire(ticker int) cacher.Option {
 	return func(cfg *cacher.Config) {
-		cfg.FieldByName("expire").AsInterface(ticker)
+		cfg.SetByField("expire", ticker)
 	}
 }
