@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/volts-dev/utils v0.0.0-20230315102412-df9675e942c9
+	github.com/volts-dev/utils v0.0.0-20230405153128-530f75d1dcfd
 )
 
 require (
@@ -39,5 +39,5 @@ require (
 	github.com/jinzhu/copier v0.3.5
 	github.com/klauspost/compress v1.15.11
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
-	github.com/volts-dev/dataset v0.0.0-20230410172143-ee60fb8d1ecd
+	github.com/volts-dev/dataset v0.0.0-20230411043643-3c6970f6bee9
 )

@@ -14,7 +14,7 @@ import (
 	"github.com/volts-dev/cacher"
 )
 
-var Memory cacher.CacherType = cacher.Register("Memory", func() cacher.ICacher {
+var Memory = cacher.Register("Memory", func() cacher.ICacher {
 	return New()
 })
 

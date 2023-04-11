@@ -18,7 +18,7 @@ var (
 	errRedisLocalCacheNil = errors.New("cache: both Redis and LocalCache are nil")
 )
 
-var Redis cacher.CacherType = cacher.Register("Redis", func() cacher.ICacher {
+var Redis = cacher.Register("Redis", func() cacher.ICacher {
 	return New()
 })
 
