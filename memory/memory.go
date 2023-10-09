@@ -98,9 +98,9 @@ func New(opts ...cacher.Option) *TMemoryCache {
 // NewStack returns a new StackCacher.
 func NewStack(opts ...cacher.Option) StackCache {
 	opts = append([]cacher.Option{
-		WithExpire(30),
-		WithInterval(5),
-		WithSize(200),
+		WithExpire(60),
+		WithInterval(30),
+		WithSize(2000),
 	}, opts...)
 	return New(opts...)
 }
