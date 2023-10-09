@@ -9,6 +9,14 @@ import (
 	"github.com/volts-dev/utils"
 )
 
+func TestStackCache(t *testing.T) {
+	c := NewStack(WithExpire(30), WithSize(2))
+	c.Push("你")
+	c.Push("好")
+	c.Push("啊!")
+	fmt.Println(c.Pop(), c.Pop(), c.Pop())
+}
+
 func TestWithStruct(t *testing.T) {
 	type A struct {
 		Int    int

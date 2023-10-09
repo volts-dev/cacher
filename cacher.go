@@ -22,6 +22,7 @@ func (self CacherType) String() string {
 
 // Cache interface contains all behaviors for cache adapter.
 // usage:
+//
 //	cache.Register("file",cache.NewFileCache()) // this operation is run in init method of file.go.
 //	c := cache.NewCache("file","{....}")
 //	c.Put("key",value,3600)
@@ -51,7 +52,7 @@ type (
 
 		//*** Std Attr ***
 		// below method will change element's order to front of the list
-		Get(key string, value interface{}, ctx ...context.Context) error // get cached value by key.
+		Get(key string, value interface{}, ctx ...context.Context) error // get cached value by key.value must be not nil
 		Set(block *CacheBlock) error                                     // set cached value with key and expire time.
 		Exists(key string, ctx ...context.Context) bool                  // check if cached value exists or not.
 		Delete(key string, ctx ...context.Context) error                 // delete cached value by key.
@@ -82,7 +83,6 @@ func Register(name string, adapter func() ICacher) CacherType {
 	return h
 }
 
-//
 // Create a new cache driver by adapter name and config string.
 // config need to be correct JSON as string: {"interval":360}.
 // it will start gc automatically.

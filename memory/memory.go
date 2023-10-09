@@ -41,50 +41,64 @@ type (
 		MoveToBack(key string)
 	}
 	StackCache interface {
-		cacher.ICacher
+		//cacher.ICacher
 		//*** Stack Attr ***
-		Push(value interface{}, expired ...int64) error //方法可向数组的末尾添加一个或多个元素，并返回新的长度。
-		Shift() interface{}                             //方法用于把数组的第一个元素从其中删除，并返回第一个元素的值。
-		Pop() interface{}                               // 移出最后一个入栈的并返回它
-		New(New func() interface{})
+		Push(any) error //方法可向数组的末尾添加一个或多个元素，并返回新的长度。
+		Shift() any     //方法用于把数组的第一个元素从其中删除，并返回第一个元素的值。
+		Pop() any       // 移出最后一个入栈的并返回它
+		//New(New func() interface{})
 	}
 
 	// Memory cache adapter.
 	// it contains a RW locker for safe map storage.
 	TMemoryCache struct {
 		sync.RWMutex
-		config  *Config
-		dur     time.Duration            // GC 时间间隔
-		expired time.Duration            // #默认缓存过期时间
-		time_   []time.Time              // #完全清空时间
-		blocks  map[string]*list.Element //*cacher.CacheBlock
-		new     func() interface{}
-		Every   int //废弃 run an expiration check Every clock time
+		config *Config
+		//dur     time.Duration            // GC 时间间隔
+		//expired time.Duration            // #默认缓存过期时间
+		time_  []time.Time              // #完全清空时间
+		blocks map[string]*list.Element //*cacher.CacheBlock
+		new    func() interface{}
+		Every  int //废弃 run an expiration check Every clock time
+
+		blockPool sync.Pool
 	}
 )
 
-// NewMemoryCache returns a new MemoryCache.
+// New returns a new MemoryCache.
 func New(opts ...cacher.Option) *TMemoryCache {
 	cfg := &Config{
 		Active:   true,
-		Interval: cacher.INTERVAL_TIME, //#必须防止0间隔
-		Expire:   cacher.EXPIRED_TIME,
-		max:      cacher.MAX_CACHE,
+		Interval: cacher.INTERVAL_TIME * time.Second, //#必须防止0间隔
+		Expire:   cacher.EXPIRED_TIME * time.Second,
+		Size:     cacher.MAX_CACHE,
 	}
 	cfg.Init(opts...)
 
-	cacher := &TMemoryCache{
-		config:  cfg,
-		dur:     cacher.INTERVAL_TIME * time.Second,
-		expired: cacher.EXPIRED_TIME * time.Second,
-		blocks:  make(map[string]*list.Element),
+	c := &TMemoryCache{
+		config: cfg,
+		//dur:     cacher.INTERVAL_TIME * time.Second,
+		//expired: cacher.EXPIRED_TIME * time.Second,
+		blocks: make(map[string]*list.Element),
 	}
 
-	err := cacher.gc()
+	c.blockPool.New = func() any { return &cacher.CacheBlock{} }
+
+	err := c.gc()
 	if err != nil {
-		cacher = nil
+		c = nil
 	}
-	return cacher
+	return c
+}
+
+// NewStack returns a new StackCacher.
+func NewStack(opts ...cacher.Option) StackCache {
+	opts = append([]cacher.Option{
+		WithExpire(30),
+		WithInterval(5),
+		WithSize(200),
+	}, opts...)
+	return New(opts...)
 }
 
 func (self *TMemoryCache) Init(opts ...cacher.Option) {
@@ -192,6 +206,10 @@ type emptyInterface struct {
 // Get cache from memory.
 // if non-existed or expired, return nil.
 func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) error {
+	if !self.config.Active {
+		return nil
+	}
+
 	self.RLock()
 	ele, ok := self.blocks[name]
 	self.RUnlock()
@@ -213,8 +231,8 @@ func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) er
 				src := (*emptyAny)(unsafe.Pointer(&block.Value)).val
 				*(*emptyAny)(unsafe.Pointer(dst)) = *(*emptyAny)(unsafe.Pointer(src))
 			*/
-			copier.Copy(value, block.Value)
-			return nil
+			err := copier.Copy(value, block.Value)
+			return err
 		}
 	}
 
@@ -225,6 +243,10 @@ func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) er
 // if expired is 0, it will be cleaned by next gc operation ( default gc clock is 1 minute).
 // expired is -1 mean never expire
 func (self *TMemoryCache) Set(block *cacher.CacheBlock) error {
+	if !self.config.Active || self.config.GcList.Len() >= self.config.Size {
+		return nil
+	}
+
 	self.Lock()
 
 	ele, ok := self.blocks[block.Key]
@@ -244,63 +266,79 @@ func (self *TMemoryCache) Set(block *cacher.CacheBlock) error {
 }
 
 // 删除第一个元素
-func (self *TMemoryCache) Shift() *cacher.CacheBlock {
-	if self.config.Active {
-		//fmt.Println(len(self.blocks))
-		self.config.GcListLock.Lock()
-		ele := self.config.GcList.Front()
-		if ele == nil {
-			self.config.GcListLock.Unlock()
-			return nil
-		}
-		self.config.GcList.Remove(ele)
-		self.config.GcListLock.Unlock()
-
-		if block, ok := ele.Value.(*cacher.CacheBlock); ok {
-			self.remove_block(block.Key)
-			return block
-		}
+func (self *TMemoryCache) Shift() any {
+	if !self.config.Active {
+		return nil
 	}
+
+	self.config.GcListLock.Lock()
+	ele := self.config.GcList.Front()
+	if ele == nil {
+		self.config.GcListLock.Unlock()
+		return nil
+	}
+	self.config.GcList.Remove(ele)
+	self.config.GcListLock.Unlock()
+
+	if block, ok := ele.Value.(*cacher.CacheBlock); ok {
+		value := block.Value
+		block.Key = ""
+		block.Value = nil
+		self.blockPool.Put(block)
+		return value
+	}
+
 	return nil
 }
 
 // get and delete last item from the src
-func (self *TMemoryCache) Pop() *cacher.CacheBlock {
-	if self.config.Active {
-		//fmt.Println(len(self.blocks))
-		self.config.GcListLock.Lock()
-		ele := self.config.GcList.Back()
-		if ele == nil {
-			self.config.GcListLock.Unlock()
-			return nil
-		}
-		self.config.GcList.Remove(ele)
-		self.config.GcListLock.Unlock()
-
-		if block, ok := ele.Value.(*cacher.CacheBlock); ok {
-			self.remove_block(block.Key)
-			return block
-		}
+func (self *TMemoryCache) Pop() any {
+	if !self.config.Active {
+		return nil
 	}
+
+	self.config.GcListLock.Lock()
+	ele := self.config.GcList.Back()
+	if ele == nil {
+		self.config.GcListLock.Unlock()
+		return nil
+	}
+	self.config.GcList.Remove(ele)
+	self.config.GcListLock.Unlock()
+
+	if block, ok := ele.Value.(*cacher.CacheBlock); ok {
+		value := block.Value
+		block.Key = ""
+		block.Value = nil
+		self.blockPool.Put(block)
+		return value
+	}
+
 	return nil
 }
 
 // put to last of list
-func (self *TMemoryCache) Push(block *cacher.CacheBlock) error {
-	if block.Key == "" {
+func (self *TMemoryCache) Push(value any) error {
+	if !self.config.Active || self.config.GcList.Len() >= self.config.Size {
+		return nil
+	}
+	/*if block.Key == "" {
 		// random name
 		lName := fmt.Sprintf("%v", &block.Value)
 		block.Key = lName[2:]
 
-	}
+	}*/
+
+	block := self.blockPool.Get().(*cacher.CacheBlock)
+	block.Value = value
 
 	self.config.GcListLock.Lock()
-	elm := self.config.GcList.PushBack(block)
+	self.config.GcList.PushBack(block)
 	self.config.GcListLock.Unlock()
-
-	self.Lock()
-	self.blocks[block.Key] = elm
-	self.Unlock()
+	/*
+		self.Lock()
+		self.blocks[block.Key] = elm
+		self.Unlock()*/
 	return nil
 }
 
@@ -317,17 +355,17 @@ func (self *TMemoryCache) remove_block(name string) {
 }
 
 // / Delete cache in memory.event a err
-func (self *TMemoryCache) Delete(name string, ctx ...context.Context) (err error) {
+func (self *TMemoryCache) Delete(key string, ctx ...context.Context) (err error) {
 	self.RLock()
-	ele, ok := self.blocks[name]
+	ele, ok := self.blocks[key]
 	self.RUnlock()
 
 	if ok {
 		self.remove_list(ele)
-		self.remove_block(name)
+		self.remove_block(key)
 		//fmt.Print("aa ", name, ok)
 	} else {
-		return errors.New("key not exist" + name)
+		return errors.New(fmt.Sprintf("delete key %s is not exist!", key))
 	}
 
 	return
@@ -341,7 +379,7 @@ func (self *TMemoryCache) Incr(key string) error {
 	self.RUnlock()
 
 	if !ok {
-		return errors.New("key not exist " + key)
+		return errors.New(fmt.Sprintf("Incr key %s is not exist!", key))
 	}
 	itm := ele.Value.(*cacher.CacheBlock)
 	itm.LastAccess.Add(cacher.DELAY_TIME * time.Second)
@@ -372,12 +410,12 @@ func (self *TMemoryCache) Len() int {
 }
 
 // max of cache size
-func (self *TMemoryCache) Max(max ...int) int {
+func (self *TMemoryCache) Size(max ...int) int {
 	if len(max) > 0 {
-		self.config.max = max[0]
+		self.config.Size = max[0]
 	}
 
-	return self.config.max
+	return self.config.Size
 }
 
 // Decrease counter in memory.
@@ -444,19 +482,9 @@ func (self *TMemoryCache) Exists(name string, ctx ...context.Context) bool {
 
 // start memory cache. it will check expiration in every clock time.
 func (self *TMemoryCache) gc() error {
-	dur, err := time.ParseDuration(fmt.Sprintf("%ds", self.config.Interval))
-	if err != nil {
-		return err
-	}
-
-	expired, err := time.ParseDuration(fmt.Sprintf("%ds", self.config.Expire))
-	if err != nil {
-		return err
-	}
-
-	self.Every = self.config.Interval // 废弃
-	self.dur = dur
-	self.expired = expired
+	//self.Every = self.config.Interval // 废弃
+	//self.dur = dur
+	//self.expired = expired
 	go self.vaccuum()
 	return nil
 }
@@ -475,7 +503,7 @@ func (self *TMemoryCache) vaccuum() {
 	)
 
 	for {
-		<-time.After(self.dur)
+		<-time.After(self.config.Interval)
 
 		//fmt.Println("tick")
 		if !self.config.Active || self.config.GcList.Len() == 0 {
@@ -496,10 +524,9 @@ func (self *TMemoryCache) vaccuum() {
 			next := iter.Next()
 			self.config.GcListLock.RUnlock()
 
-			//fmt.Println(element)
-			// #check
+			/* stack类非block类定时*/
 			if block, ok = iter.Value.(*cacher.CacheBlock); !ok {
-				fmt.Println("RRR", iter)
+				//fmt.Println("RRR", iter)
 				self.remove_list(iter)
 
 				iter = next
@@ -538,7 +565,7 @@ func (self *TMemoryCache) vaccuum() {
 		}
 
 		// # 删除即将到期
-		if over := self.config.GcList.Len() - self.config.max; over > 0 {
+		if over := self.config.GcList.Len() - self.config.Size; over > 0 {
 			sort.Sort(list)
 
 			for _, idex := range list {

@@ -39,6 +39,7 @@ func (self *CacheBlock) Clone() *CacheBlock {
 		SkipLocalCache: self.SkipLocalCache,
 	}
 }
+
 func (self *CacheBlock) Context() context.Context {
 	if self.Ctx == nil {
 		return context.Background()
