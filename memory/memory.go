@@ -84,10 +84,14 @@ func New(opts ...cacher.Option) *TMemoryCache {
 
 	c.blockPool.New = func() any { return &cacher.CacheBlock{} }
 
-	err := c.gc()
-	if err != nil {
-		c = nil
+	/* Interval等于0不回收 */
+	if cfg.Interval > 0 {
+		err := c.gc()
+		if err != nil {
+			c = nil
+		}
 	}
+
 	return c
 }
 
@@ -486,6 +490,7 @@ func (self *TMemoryCache) gc() error {
 	//self.Every = self.config.Interval // 废弃
 	//self.dur = dur
 	//self.expired = expired
+
 	go self.vaccuum()
 	return nil
 }
@@ -527,16 +532,14 @@ func (self *TMemoryCache) vaccuum() {
 
 			/* stack类非block类定时*/
 			if block, ok = iter.Value.(*cacher.CacheBlock); !ok {
-				//fmt.Println("RRR", iter)
 				self.remove_list(iter)
-
 				iter = next
 				continue
 			}
 
 			// -1 永不过期
 			TTL := block.Ttl()
-			if TTL == 0 {
+			if TTL <= 0 {
 				iter = next
 				continue
 			}

@@ -22,7 +22,7 @@ type (
 		Expire     time.Duration
 		prefix     string
 		Size       int // 最大上限缓存
-
+		GC         bool
 	}
 )
 
