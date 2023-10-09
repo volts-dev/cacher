@@ -330,6 +330,7 @@ func (self *TMemoryCache) Push(value any) error {
 	}*/
 
 	block := self.blockPool.Get().(*cacher.CacheBlock)
+	block.LastAccess = time.Now()
 	block.Value = value
 
 	self.config.GcListLock.Lock()
