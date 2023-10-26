@@ -211,7 +211,7 @@ type emptyInterface struct {
 // if non-existed or expired, return nil.
 func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) error {
 	if !self.config.Active {
-		return nil
+		return cacher.ErrInactive
 	}
 
 	self.RLock()

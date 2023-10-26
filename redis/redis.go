@@ -134,6 +134,10 @@ func (self *RedisCache) GetSkippingLocalCache(key string, value interface{}, ctx
 // Get cache from memory.
 // if non-existed or expired, return nil.
 func (self *RedisCache) Get(key string, value interface{}, ctx ...context.Context) error {
+	if !self.config.Active {
+		return cacher.ErrInactive
+	}
+
 	return self.get(key, value, false, ctx...)
 }
 
@@ -153,6 +157,10 @@ func (self *RedisCache) get(key string, value interface{}, skipLocalCache bool, 
 }
 
 func (self *RedisCache) Set(block *cacher.CacheBlock) error {
+	if !self.config.Active {
+		return nil
+	}
+
 	b, err := self.marshal(block.Value)
 	if err != nil {
 		return err
@@ -227,13 +235,11 @@ func (self *RedisCache) getBytes(ctx context.Context, key string, skipLocalCache
 }
 
 func (self *RedisCache) Clear() error {
-	err := self.config.LocalCache.Clear()
-	return err
+	return self.config.LocalCache.Clear()
 }
 
 func (self *RedisCache) Close() error {
-	err := self.Clear()
-	return err
+	return self.Clear()
 }
 
 func (self *RedisCache) Delete(key string, ctx ...context.Context) error {
