@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	MAX_CACHE     = 1000  //
+	MAX_CACHE     = 10000 //
 	EXPIRED_TIME  = 86400 // default expire time of cacahe
 	INTERVAL_TIME = 30    // interval of gc time
 	DELAY_TIME    = 10

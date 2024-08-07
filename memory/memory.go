@@ -250,12 +250,13 @@ func (self *TMemoryCache) Set(block *cacher.CacheBlock) error {
 	if !self.config.Active || self.config.GcList.Len() >= self.config.Size {
 		return nil
 	}
+	block.LastAccess = time.Now()
 
 	self.Lock()
 
-	ele, ok := self.blocks[block.Key]
-	if ok {
-		block.LastAccess = time.Now()
+	ele, has := self.blocks[block.Key]
+	if has {
+
 		ele.Value = block
 	} else {
 		self.config.GcListLock.Lock()
