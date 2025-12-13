@@ -48,8 +48,8 @@ func TestStd(t *testing.T) {
 	for i := 0; i < count; i++ {
 		go func(idx int, ck cacher.ICacher) {
 			for k := 0; k < 1000; k++ {
-				str := utils.IntToStr(idx) + "Name" + utils.IntToStr(k)
-				ck.Set(&cacher.CacheBlock{Key: utils.IntToStr(idx) + "+" + utils.IntToStr(k), Value: str})
+				str := utils.ToString(idx) + "Name" + utils.ToString(k)
+				ck.Set(&cacher.CacheBlock{Key: utils.ToString(idx) + "+" + utils.ToString(k), Value: str})
 			}
 			w.Done()
 		}(i, chr)
@@ -63,7 +63,7 @@ func TestStd(t *testing.T) {
 	var ele string
 	for i := 0; i < count; i++ {
 		for k := 0; k < 1000; k++ {
-			err := chr.Get(utils.IntToStr(i)+"+"+utils.IntToStr(k), &ele)
+			err := chr.Get(utils.ToString(i)+"+"+utils.ToString(k), &ele)
 			if err != nil {
 				t.Fatal(err)
 			}
