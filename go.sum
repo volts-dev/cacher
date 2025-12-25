@@ -59,8 +59,6 @@ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
 github.com/vmihailenco/msgpack v4.0.4+incompatible h1:dSLoQfGFAo3F6OoNhwUmLwVgaUXK79GlxNBwueZn0xI=
 github.com/vmihailenco/msgpack v4.0.4+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
-github.com/volts-dev/dataset v0.0.0-20251213114329-6b93f1126177 h1:96Sr/P4+2vMWtw7M142c9Pjt+7cCYD4i1symnuqakHg=
-github.com/volts-dev/dataset v0.0.0-20251213114329-6b93f1126177/go.mod h1:9LJVNYybouR8R/a+ys2S10WW9hU0NlQGYGpMcbaU4yE=
 github.com/volts-dev/dataset v0.0.0-20251214170336-a07c98c1bba5 h1:Nm6P2SZlqC6fjD0bhOUP7U58NxKGiGDE6zeeLdWL1bY=
 github.com/volts-dev/dataset v0.0.0-20251214170336-a07c98c1bba5/go.mod h1:9LJVNYybouR8R/a+ys2S10WW9hU0NlQGYGpMcbaU4yE=
 github.com/volts-dev/utils v0.0.0-20241206111447-ee54d4e2c42c h1:/U3BhhBRBlQzSsZD/jqoZhvXEIPzxIVBwhuLD3+7unc=
