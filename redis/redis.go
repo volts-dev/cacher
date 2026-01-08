@@ -107,7 +107,8 @@ func (self *RedisCache) Len() int {
 
 // Exists reports whether value for the given key exists.
 func (self *RedisCache) Exists(key string, ctx ...context.Context) bool {
-	return self.Get(key, nil, ctx...) == nil
+	_, err := self.Get(key, ctx...)
+	return err == nil
 }
 
 func (self *RedisCache) getKey(key string) string {
@@ -127,21 +128,21 @@ func (self *RedisCache) getValue(ctx context.Context, sid string) (string, error
 }
 
 // Get gets the value for the given key skipping local cache.
-func (self *RedisCache) GetSkippingLocalCache(key string, value interface{}, ctx ...context.Context) error {
-	return self.get(key, value, true, ctx...)
+func (self *RedisCache) GetSkippingLocalCache(key string, ctx ...context.Context) (any, error) {
+	return self.get(key, true, ctx...)
 }
 
 // Get cache from memory.
 // if non-existed or expired, return nil.
-func (self *RedisCache) Get(key string, value interface{}, ctx ...context.Context) error {
+func (self *RedisCache) Get(key string, ctx ...context.Context) (any, error) {
 	if !self.config.Active {
-		return cacher.ErrInactive
+		return nil, cacher.ErrInactive
 	}
 
-	return self.get(key, value, false, ctx...)
+	return self.get(key, false, ctx...)
 }
 
-func (self *RedisCache) get(key string, value interface{}, skipLocalCache bool, ctx ...context.Context) error {
+func (self *RedisCache) get(key string, skipLocalCache bool, ctx ...context.Context) (value any, err error) {
 	var c context.Context
 	if ctx != nil {
 		c = ctx[0]
@@ -151,9 +152,11 @@ func (self *RedisCache) get(key string, value interface{}, skipLocalCache bool, 
 
 	b, err := self.getBytes(c, key, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return self.config.Unmarshal(b, value)
+
+	self.config.Unmarshal(b, &value)
+	return
 }
 
 func (self *RedisCache) Set(block *cacher.CacheBlock) error {
@@ -195,12 +198,12 @@ func (self *RedisCache) Set(block *cacher.CacheBlock) error {
 
 func (self *RedisCache) getBytes(ctx context.Context, key string, skipLocalCache bool) ([]byte, error) {
 	if !skipLocalCache && self.config.LocalCache != nil {
-		var buf []byte
-		err := self.config.LocalCache.Get(key, &buf)
+		//var buf []byte
+		buf, err := self.config.LocalCache.Get(key)
 		if err != nil {
 			return nil, err
 		}
-		return buf, nil
+		return buf.([]byte), nil
 	}
 
 	if self.config.cli == nil {

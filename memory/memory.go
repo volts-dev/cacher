@@ -10,7 +10,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/jinzhu/copier"
 	"github.com/volts-dev/cacher"
 )
 
@@ -209,9 +208,9 @@ type emptyInterface struct {
 
 // Get cache from memory.
 // if non-existed or expired, return nil.
-func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) error {
+func (self *TMemoryCache) Get(name string, ctx ...context.Context) (value any, err error) {
 	if !self.config.Active {
-		return cacher.ErrInactive
+		return nil, cacher.ErrInactive
 	}
 
 	self.RLock()
@@ -235,12 +234,12 @@ func (self *TMemoryCache) Get(name string, value any, ctx ...context.Context) er
 				src := (*emptyAny)(unsafe.Pointer(&block.Value)).val
 				*(*emptyAny)(unsafe.Pointer(dst)) = *(*emptyAny)(unsafe.Pointer(src))
 			*/
-			err := copier.Copy(value, block.Value)
-			return err
+			//err := copier.Copy(value, block.Value)
+			return block.Value, nil
 		}
 	}
 
-	return cacher.ErrCacheMiss
+	return nil, cacher.ErrCacheMiss
 }
 
 // Put cache to memory.
@@ -370,11 +369,8 @@ func (self *TMemoryCache) Delete(key string, ctx ...context.Context) (err error)
 		self.remove_list(ele)
 		self.remove_block(key)
 		//fmt.Print("aa ", name, ok)
-	} else {
-		return errors.New(fmt.Sprintf("delete key %s is not exist!", key))
 	}
-
-	return
+	return fmt.Errorf("delete key %s is not exist!", key)
 }
 
 // Increase cache counter in memory.
@@ -385,7 +381,7 @@ func (self *TMemoryCache) Incr(key string) error {
 	self.RUnlock()
 
 	if !ok {
-		return errors.New(fmt.Sprintf("Incr key %s is not exist!", key))
+		return fmt.Errorf("Incr key %s is not exist!", key)
 	}
 	itm := ele.Value.(*cacher.CacheBlock)
 	itm.LastAccess.Add(cacher.DELAY_TIME * time.Second)
@@ -557,7 +553,7 @@ func (self *TMemoryCache) vaccuum() {
 				iter = next
 				continue
 			} else {
-				dur := time.Now().Sub(block.LastAccess)
+				dur := time.Since(block.LastAccess)
 				//if dur < TTL/3 || dur < self.expired/3 {
 				if dur < TTL/3 {
 					// #因为设置会插入到前端，对即将到期的进行标记
@@ -605,7 +601,7 @@ func (self *TMemoryCache) __Expired(name string) bool {
 		return false
 	}
 
-	if time.Now().Sub(itm.LastAccess) >= itm.TTL {
+	if time.Since(itm.LastAccess) >= itm.TTL {
 		/*self.Lock()
 		delete(self.blocks, name)
 		self.Unlock()*/

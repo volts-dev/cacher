@@ -33,7 +33,6 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/jinzhu/copier v0.4.0
 	github.com/klauspost/compress v1.17.4
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	github.com/volts-dev/dataset v0.0.0-20251214170336-a07c98c1bba5

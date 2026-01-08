@@ -25,8 +25,8 @@ func TestWithStruct(t *testing.T) {
 	chr := New()
 	chr.Set(&cacher.CacheBlock{Key: "A", Value: &A{Int: 123456789, String: "fsdf"}})
 
-	a := A{String: "aaaaaaaa"}
-	if err := chr.Get("A", &a); err != nil {
+	a, err := chr.Get("A")
+	if err != nil {
 		t.Fatal(err)
 	}
 	fmt.Println(a)
@@ -60,14 +60,13 @@ func TestStd(t *testing.T) {
 		t.Logf("Put was error %v/%d", chr.Len(), count*1000)
 	}
 
-	var ele string
 	for i := 0; i < count; i++ {
 		for k := 0; k < 1000; k++ {
-			err := chr.Get(utils.ToString(i)+"+"+utils.ToString(k), &ele)
+			ele, err := chr.Get(utils.ToString(i) + "+" + utils.ToString(k))
 			if err != nil {
 				t.Fatal(err)
 			}
-			fmt.Println(fmt.Sprintf("%d=%v", i, ele))
+			fmt.Printf("%d=%v\n", i, ele)
 		}
 	}
 	/*

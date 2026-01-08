@@ -19,8 +19,8 @@ func TestBase(t *testing.T) {
 		Key:   Key,
 		Value: "TestBase",
 	})
-	var s string
-	err := r.Get(Key, &s)
+
+	s, err := r.Get(Key)
 	if err != nil {
 		t.Fatal(err)
 	}

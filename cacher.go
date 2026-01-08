@@ -52,10 +52,10 @@ type (
 
 		//*** Std Attr ***
 		// below method will change element's order to front of the list
-		Get(key string, value interface{}, ctx ...context.Context) error // get cached value by key.value must be not nil
-		Set(block *CacheBlock) error                                     // set cached value with key and expire time.
-		Exists(key string, ctx ...context.Context) bool                  // check if cached value exists or not.
-		Delete(key string, ctx ...context.Context) error                 // delete cached value by key.
+		Get(key string, ctx ...context.Context) (value any, err error) // get cached value by key.value must be not nil
+		Set(block *CacheBlock) error                                   // set cached value with key and expire time.
+		Exists(key string, ctx ...context.Context) bool                // check if cached value exists or not.
+		Delete(key string, ctx ...context.Context) error               // delete cached value by key.
 		//Refresh(key string)
 		Keys(ctx ...context.Context) []string
 		Len() int
