@@ -406,8 +406,8 @@ func (self *TMemoryCache) Incr(key string) error {
 
 // Count of cache size
 func (self *TMemoryCache) Len() int {
-	self.config.GcListLock.RLock()
-	defer self.config.GcListLock.RUnlock()
+	self.RLock()
+	defer self.RUnlock()
 	return len(self.blocks)
 }
 
