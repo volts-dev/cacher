@@ -1,6 +1,8 @@
 package cacher
 
 import (
+	"log"
+
 	"github.com/volts-dev/dataset"
 )
 
@@ -20,8 +22,19 @@ func (self *Config) Init(config interface{}, opts ...Option) {
 	}
 
 	for _, opt := range opts {
-		opt(self)
+		safeApplyOption(opt, self)
 	}
 
 	self.AsStruct(config) // mapping to config
+}
+
+// safeApplyOption applies an Option and recovers from panics caused by
+// invalid field names in SetByField reflection calls, logging instead of crashing.
+func safeApplyOption(opt Option, cfg *Config) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("cacher: option apply failed: %v", r)
+		}
+	}()
+	opt(cfg)
 }
