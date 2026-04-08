@@ -30,6 +30,7 @@ type (
 		prefix       string
 		cli          rediser
 		context      context.Context
+		// StatsEnabled must be set before first use; it is not safe to change concurrently.
 		StatsEnabled bool
 		hits         uint64
 		misses       uint64

@@ -150,7 +150,7 @@ func (self *RedisCache) get(key string, skipLocalCache bool, ctx ...context.Cont
 		c = context.Background()
 	}
 
-	b, err := self.getBytes(c, key, true)
+	b, err := self.getBytes(c, key, skipLocalCache)
 	if err != nil {
 		return nil, err
 	}
@@ -237,10 +237,14 @@ func (self *RedisCache) getBytes(ctx context.Context, key string, skipLocalCache
 	return b, nil
 }
 
+// Clear removes all entries from the local cache only.
+// It does NOT flush data from the remote Redis instance.
 func (self *RedisCache) Clear() error {
 	return self.config.LocalCache.Clear()
 }
 
+// Close clears the local cache. It does not close the Redis connection,
+// which is managed externally via the client passed to WithRedis.
 func (self *RedisCache) Close() error {
 	return self.Clear()
 }
