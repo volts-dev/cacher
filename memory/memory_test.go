@@ -103,3 +103,45 @@ func TestStd(t *testing.T) {
 	fmt.Println()
 	fmt.Println(chr.Active())
 }
+
+// TestConcurrentDelete verifies that concurrent deletes of the same key do not panic or deadlock.
+func TestConcurrentDelete(t *testing.T) {
+	c := New(WithSize(100))
+	key := "shared-key"
+	c.Set(&cacher.CacheBlock{Key: key, Value: "v"})
+
+	var wg sync.WaitGroup
+	const workers = 20
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			c.Delete(key) // only one succeeds, rest get error — both are valid
+		}()
+	}
+	wg.Wait()
+	if c.Exists(key) {
+		t.Fatal("key still exists after concurrent deletes")
+	}
+}
+
+// TestGCAndSet_Concurrent runs GC and Set concurrently to detect deadlocks or races.
+func TestGCAndSet_Concurrent(t *testing.T) {
+	c := New(WithSize(50), WithInterval(1))
+	const workers = 10
+	const ops = 100
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for k := 0; k < ops; k++ {
+				key := fmt.Sprintf("gc-%d-%d", id, k)
+				c.Set(&cacher.CacheBlock{Key: key, Value: id})
+				c.Get(key)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
