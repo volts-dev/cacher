@@ -142,6 +142,37 @@ func (self *RedisCache) Get(key string, ctx ...context.Context) (any, error) {
 	return self.get(key, false, ctx...)
 }
 
+// GetRaw 返回按 marshal() 规则编码后的原始字节，跳过 Get()/get() 里
+// "解到裸 interface{}" 的通用路径。
+//
+// Get() 内部固定 `var value any; self.config.Unmarshal(b, &value)`——传给
+// Unmarshal 的目标永远是 *interface{}，unmarshal() 里为 *[]byte/*string
+// 准备的直通分支因此永远命中不了，msgpack.Unmarshal 只能把编码前是
+// struct/指针/接口的值解成 map[string]interface{}，具体类型信息全部丢失，
+// 调用方即便知道原始类型也无法转型回去（2026-07-24 debug core/session
+// 跨进程会话共享时撞出：SetSession 编码成功，但任何 GetSession 都拿不回
+// *Session，因为 Get() 给不回比 map 更具体的东西）。
+//
+// 调用方若自己已经把值编码成 []byte（如 core/session 用 json.Marshal 出的
+// 会话快照）再传给 Set()，marshal() 会原样直传不加 msgpack 包装（见其
+// `case []byte` 分支），此时用 GetRaw 才能原样取回，自己按已知的具体类型
+// 反序列化。只有 redis 后端有这个必要——memory 后端 Get() 本就是直接
+// 返回原 Go 值，不经过任何序列化，没有这个损失。
+func (self *RedisCache) GetRaw(key string, ctx ...context.Context) ([]byte, error) {
+	if !self.config.Active {
+		return nil, cacher.ErrInactive
+	}
+
+	var c context.Context
+	if len(ctx) > 0 {
+		c = ctx[0]
+	} else {
+		c = context.Background()
+	}
+
+	return self.getBytes(c, key, false)
+}
+
 func (self *RedisCache) get(key string, skipLocalCache bool, ctx ...context.Context) (value any, err error) {
 	var c context.Context
 	if ctx != nil {

@@ -34,13 +34,9 @@ func TestBase(t *testing.T) {
 
 // TestGetSkippingLocalCache verifies that skipLocalCache=true bypasses the local cache
 // and that the default Get path uses the local cache when available.
-// Note: config.LocalCache is assigned directly because WithLocalCacher relies on
-// reflection-based field mapping that does not handle interface types correctly;
-// that issue is tracked separately and is out of scope here.
 func TestGetSkippingLocalCache(t *testing.T) {
 	local := memory.New()
-	rc := New()
-	rc.config.LocalCache = local // bypass reflection — see note above
+	rc := New(WithLocalCacher(local))
 
 	// Seed via rc.Set so the value goes through marshal→compress (adds compression byte).
 	// String/[]byte values are stored raw without a compression byte and cannot be
@@ -64,5 +60,33 @@ func TestGetSkippingLocalCache(t *testing.T) {
 	_, err = rc.GetSkippingLocalCache("k1")
 	if err != cacher.ErrCacheMiss {
 		t.Fatalf("GetSkippingLocalCache expected ErrCacheMiss, got: %v", err)
+	}
+}
+
+// TestWithRedis_WiresClient guards against a regression where WithRedis/WithLocalCacher
+// silently failed to wire self.cli/self.LocalCache: those are unexported fields, and
+// Config.Init's generic path (SetByField into a dataset record, then AsStruct/mapstructure
+// decoding it back onto the concrete struct) only ever writes exported fields — so cli
+// stayed nil forever and every Set() hit the "both Redis and LocalCache are nil" error,
+// with no visible symptom other than data silently never reaching Redis. Found 2026-07-24
+// debugging cross-process session sharing: SetSession reported success while Redis stayed
+// empty. Config.Init now pulls "cli"/"local_cache" back out of the record explicitly.
+func TestWithRedis_WiresClient(t *testing.T) {
+	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+	r := New(WithRedis(rdb))
+
+	key := "TestWithRedis_WiresClient"
+	defer r.Delete(key)
+
+	if err := r.Set(&cacher.CacheBlock{Key: key, Value: []byte("hello")}); err != nil {
+		t.Fatalf("Set returned error (cli likely nil): %v", err)
+	}
+
+	b, err := r.GetRaw(key)
+	if err != nil {
+		t.Fatalf("GetRaw returned error: %v", err)
+	}
+	if string(b) != "hello" {
+		t.Fatalf("GetRaw = %q, want %q", b, "hello")
 	}
 }
