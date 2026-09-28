@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/volts-dev/cacher"
 	"github.com/volts-dev/utils"
@@ -144,4 +145,49 @@ func TestGCAndSet_Concurrent(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// Expire 只改存活期，不碰值 —— 会话续期就是靠这一点避开"读-改-写盖掉并发改写"，
+// 那条路的代价是用户随机被登出（见 redis/redis.go 里 Expire 上方的说明）。
+func TestExpireExtendsWithoutTouchingTheValue(t *testing.T) {
+	c := New()
+	if err := c.Set(&cacher.CacheBlock{Key: "sid", Value: "payload", TTL: time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.Expire("sid", time.Hour); err != nil {
+		t.Fatalf("Expire: %v", err)
+	}
+
+	v, err := c.Get("sid")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if v != "payload" {
+		t.Fatalf("值被改了: %v", v)
+	}
+
+	c.RLock()
+	block := c.blocks["sid"].Value.(*cacher.CacheBlock)
+	c.RUnlock()
+	if block.TTL != time.Hour {
+		t.Fatalf("TTL=%s，没有被延长", block.TTL)
+	}
+}
+
+// 键不存在必须报得出来：redis 的 EXPIRE 对不存在的键回 0（不是错误），
+// 调用方要能分辨"续上了"和"这条已经没了"。
+func TestExpireOnMissingKey(t *testing.T) {
+	if err := New().Expire("nobody", time.Hour); err != cacher.ErrCacheMiss {
+		t.Fatalf("期待 ErrCacheMiss，得到 %v", err)
+	}
+}
+
+// 非正的 TTL 在 redis 那边等于"立刻删掉"，而调用 Expire 的意图永远是续期。
+func TestExpireRejectsNonPositiveTTL(t *testing.T) {
+	c := New()
+	c.Set(&cacher.CacheBlock{Key: "sid", Value: "x", TTL: time.Minute})
+	if err := c.Expire("sid", 0); err == nil {
+		t.Fatal("TTL=0 应该报错，而不是把这条会话删掉")
+	}
 }

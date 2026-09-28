@@ -301,6 +301,38 @@ func (self *TMemoryCache) Push(value any) error {
 
 // Delete removes a cache entry by key.
 // Atomic: both gcList and blocks map are updated under a single Lock.
+// Expire 重新设定键的存活期，**不碰它的值**（语义与 redis 后端的同名方法一致，
+// 见那边的说明：读-改-写会把并发改写盖掉）。
+//
+// 本后端的 TTL 本来就是从 LastAccess 起算的空闲期（见 gcOnce），Get 已经在续期；
+// 这个方法存在是为了让"续期"成为一件调用方能**明确表达**的事，而不是依赖
+// "恰好读过一次"这种副作用——换到 redis 后端那个副作用就没有了。
+//
+// 键不存在时返回 cacher.ErrCacheMiss，与 redis 后端对齐。
+func (self *TMemoryCache) Expire(key string, ttl time.Duration, ctx ...context.Context) error {
+	if !self.config.Active {
+		return cacher.ErrInactive
+	}
+	if ttl <= 0 {
+		return fmt.Errorf("cacher: Expire(%q) needs a positive ttl, got %s", key, ttl)
+	}
+
+	self.Lock()
+	defer self.Unlock()
+	ele, ok := self.blocks[key]
+	if !ok || ele == nil {
+		return cacher.ErrCacheMiss
+	}
+	block, ok := ele.Value.(*cacher.CacheBlock)
+	if !ok {
+		return cacher.ErrCacheMiss
+	}
+	block.TTL = ttl
+	block.LastAccess = time.Now()
+	self.gcList.MoveToFront(ele)
+	return nil
+}
+
 func (self *TMemoryCache) Delete(key string, ctx ...context.Context) error {
 	self.Lock()
 	defer self.Unlock()

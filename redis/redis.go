@@ -30,6 +30,7 @@ type (
 		Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd
 		Get(ctx context.Context, key string) *redis.StringCmd
 		Del(ctx context.Context, keys ...string) *redis.IntCmd
+		Expire(ctx context.Context, key string, ttl time.Duration) *redis.BoolCmd
 	}
 
 	RedisCache struct {
@@ -278,6 +279,61 @@ func (self *RedisCache) Clear() error {
 // which is managed externally via the client passed to WithRedis.
 func (self *RedisCache) Close() error {
 	return self.Clear()
+}
+
+// Expire 只把键的存活期重新设一遍，**不碰它的值**。
+//
+// 为什么要有这个而不是"读出来再 Set 回去"：被缓存的东西可能正被别人改写
+// （会话记录就是这样：续期端点会轮换里面的 refresh token）。读-改-写会把一份
+// 读早了的快照盖回去，而在会话那一侧，"存着的续期令牌与客户端手上的对不上"
+// 的语义是**令牌泄漏**，处理方式是当场销毁整条会话。于是一个极窄的竞态窗口
+// 换来的是用户随机被登出，现象与病灶之间没有任何可见关联。EXPIRE 是原子的、
+// 且只碰 TTL，从根上没有这个窗口。
+//
+// 键不存在时返回 cacher.ErrCacheMiss —— redis 的 EXPIRE 对不存在的键回 0，
+// 那不是"成功续期"，调用方需要能分辨。
+func (self *RedisCache) Expire(key string, ttl time.Duration, ctx ...context.Context) error {
+	if !self.config.Active {
+		return cacher.ErrInactive
+	}
+	// 非正的 TTL 在 redis 那边等于"立刻删掉"，而调用 Expire 的意图永远是"让它多活
+	// 一会儿"。这种参数只可能来自调用方算错了，出声比悄悄删掉一条会话好。
+	if ttl <= 0 {
+		return fmt.Errorf("cacher: Expire(%q) needs a positive ttl, got %s", key, ttl)
+	}
+
+	if self.config.cli == nil {
+		if self.config.LocalCache == nil {
+			return errRedisLocalCacheNil
+		}
+		// 只有本地缓存：交给它自己的续期语义（memory 后端的 TTL 是从最后一次
+		// 访问起算的，Get 就已经在续期）。
+		if e, ok := self.config.LocalCache.(interface {
+			Expire(key string, ttl time.Duration, ctx ...context.Context) error
+		}); ok {
+			return e.Expire(key, ttl)
+		}
+		return nil
+	}
+
+	var c context.Context
+	if len(ctx) > 0 {
+		c = ctx[0]
+	} else {
+		c = context.Background()
+	}
+
+	// 用裸 key：Set/getBytes/Delete 走的都是裸 key（getKey 的 prefix 只被一个
+	// 没人调的 getValue 用着）。这里跟着 Set 走，否则续的是一个根本不存在的键，
+	// 而 EXPIRE 对不存在的键只回 0、不报错。
+	ok, err := self.config.cli.Expire(c, key, ttl).Result()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return cacher.ErrCacheMiss
+	}
+	return nil
 }
 
 func (self *RedisCache) Delete(key string, ctx ...context.Context) error {
