@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -205,6 +204,10 @@ func (self *TMemoryCache) Get(name string, ctx ...context.Context) (any, error) 
 }
 
 // Set stores a value in the cache.
+//
+// 满了就淘汰**最久没被访问**的那条（gcList 尾部；Get 把命中的挪到头部）。此前满了是
+// 直接返回 nil、什么都不写 —— 连更新已有键都被挡在容量检查后面：会话续期、黑名单
+// 登记这类写入在第 Size 条之后全部静默失效，调用方拿不到任何错误。
 func (self *TMemoryCache) Set(block *cacher.CacheBlock) error {
 	if !self.config.Active {
 		return nil
@@ -212,20 +215,33 @@ func (self *TMemoryCache) Set(block *cacher.CacheBlock) error {
 	block.LastAccess = time.Now()
 
 	self.Lock()
-	if len(self.blocks) >= self.config.Size {
+	if ele, has := self.blocks[block.Key]; has {
+		ele.Value = block
+		self.gcList.MoveToFront(ele)
 		self.Unlock()
 		return nil
 	}
-	ele, has := self.blocks[block.Key]
-	if has {
-		ele.Value = block
-		self.Unlock()
-		return nil
+	for len(self.blocks) >= self.config.Size && self.evictOldest() {
 	}
 	item := self.gcList.PushFront(block)
 	self.blocks[block.Key] = item
 	self.Unlock()
 	return nil
+}
+
+// evictOldest 从尾部起淘汰一条按键登记的条目，调用方持锁。栈模式（Push）进来的
+// 条目不在 blocks 里，跳过不动。没有可淘汰的返回 false。
+func (self *TMemoryCache) evictOldest() bool {
+	for ele := self.gcList.Back(); ele != nil; ele = ele.Prev() {
+		block, ok := ele.Value.(*cacher.CacheBlock)
+		if !ok || self.blocks[block.Key] != ele {
+			continue
+		}
+		self.gcList.Remove(ele)
+		delete(self.blocks, block.Key)
+		return true
+	}
+	return false
 }
 
 // Shift removes and returns the first element (FIFO dequeue).
@@ -466,7 +482,6 @@ func (self *TMemoryCache) gcOnce() {
 	}
 
 	var keysToDelete []string
-	var nearExpiry TIndexList
 	now := time.Now()
 
 	for iter := self.gcList.Front(); iter != nil; {
@@ -483,29 +498,17 @@ func (self *TMemoryCache) gcOnce() {
 		if TTL > 0 && now.After(block.LastAccess.Add(TTL)) {
 			self.gcList.Remove(iter)
 			keysToDelete = append(keysToDelete, block.Key)
-		} else if TTL > 0 {
-			if dur := now.Sub(block.LastAccess); dur < TTL/3 {
-				nearExpiry = append(nearExpiry, TIndex{iter, block, dur})
-			}
 		}
 		iter = next
 	}
 
-	// Evict overflow entries, preferring recently-accessed ones.
-	if over := self.gcList.Len() - self.config.Size; over > 0 {
-		sort.Sort(nearExpiry)
-		for _, idx := range nearExpiry {
-			if over <= 0 {
-				break
-			}
-			self.gcList.Remove(idx.ele)
-			keysToDelete = append(keysToDelete, idx.block.Key)
-			over--
-		}
-	}
-
 	for _, key := range keysToDelete {
 		delete(self.blocks, key)
+	}
+
+	// Size 被调小（Size(n)）之后超出的部分：同 Set，从最久没访问的淘汰。此前这里挑的是
+	// "距上次访问不到 TTL/3"的条目 —— 恰好是最热的那批。
+	for len(self.blocks) > self.config.Size && self.evictOldest() {
 	}
 	self.Unlock()
 }

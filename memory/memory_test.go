@@ -191,3 +191,53 @@ func TestExpireRejectsNonPositiveTTL(t *testing.T) {
 		t.Fatal("TTL=0 应该报错，而不是把这条会话删掉")
 	}
 }
+
+// TestSet_FullEvictsLeastRecentlyUsed 满了以后新键照样写得进去，挤掉的是最久没访问的
+// 那条；更新已有键不受容量限制。此前满了直接丢写，连续期这种更新也丢。
+func TestSet_FullEvictsLeastRecentlyUsed(t *testing.T) {
+	c := New(WithSize(3), WithInterval(0))
+	for _, k := range []string{"a", "b", "c"} {
+		c.Set(&cacher.CacheBlock{Key: k, Value: k})
+	}
+	if _, err := c.Get("a"); err != nil { // a 变成最近访问的，b 成了最旧的
+		t.Fatal(err)
+	}
+
+	c.Set(&cacher.CacheBlock{Key: "d", Value: "d"})
+	if !c.Exists("d") {
+		t.Fatal("满了以后新键没写进去")
+	}
+	if c.Exists("b") {
+		t.Fatal("该淘汰最久没访问的 b")
+	}
+	for _, k := range []string{"a", "c"} {
+		if !c.Exists(k) {
+			t.Fatalf("%s 不该被淘汰", k)
+		}
+	}
+	if c.Len() != 3 {
+		t.Fatalf("Len = %d，want 3", c.Len())
+	}
+
+	c.Set(&cacher.CacheBlock{Key: "c", Value: "c2"})
+	if v, _ := c.Get("c"); v != "c2" {
+		t.Fatalf("满了以后更新已有键丢了：got %v", v)
+	}
+	if c.Len() != 3 || !c.Exists("a") || !c.Exists("d") {
+		t.Fatal("更新已有键不该淘汰别人")
+	}
+}
+
+// TestGC_ShrinkEvictsLeastRecentlyUsed Size 调小后清扫按最久没访问的淘汰，不动热的。
+func TestGC_ShrinkEvictsLeastRecentlyUsed(t *testing.T) {
+	c := New(WithSize(4), WithInterval(0))
+	for _, k := range []string{"a", "b", "c", "d"} {
+		c.Set(&cacher.CacheBlock{Key: k, Value: k})
+	}
+	c.Get("a")
+	c.Size(2)
+	c.gcOnce()
+	if c.Len() != 2 || !c.Exists("a") || !c.Exists("d") {
+		t.Fatalf("应留下最近访问的 a、d，实际 %v", c.Keys())
+	}
+}
